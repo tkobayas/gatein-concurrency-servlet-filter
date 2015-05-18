@@ -13,10 +13,15 @@ import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 
+import org.gatein.common.logging.Logger;
+import org.gatein.common.logging.LoggerFactory;
+
 /*
  * This filter is designed to avoid concurrency against page save. See BZ1080249
  */
 public class PageSaveConcurrencyFilter implements Filter {
+    
+    private final Logger log = LoggerFactory.getLogger(PageSaveConcurrencyFilter.class);
 
     private static Set<String> pageSaveInProgress = Collections.synchronizedSet(new HashSet<String>());
 
@@ -43,11 +48,11 @@ public class PageSaveConcurrencyFilter implements Filter {
         if ("UIPageEditor".equals(req.getParameter("portal:componentId"))
                 && "Finish".equals(req.getParameter("portal:action"))) {
             // this means the page is being saved
-            //System.out.println("page is being saved for " + servletPath);
+            log.info("page is being saved for " + servletPath);
             pageSaveInProgress.add(servletPath);
             try {
                 chain.doFilter(request, response);
-                //System.out.println("page save has been committed for " + servletPath);
+                log.info("page save has been committed for " + servletPath);
             } finally {
                 pageSaveInProgress.remove(servletPath);
             }
@@ -60,7 +65,7 @@ public class PageSaveConcurrencyFilter implements Filter {
                 break;
             }
             
-            //System.out.println("waiting for " + servletPath);
+            log.info("waiting for " + servletPath);
             try {
                 Thread.sleep(100);
             } catch (InterruptedException e) {
@@ -72,7 +77,7 @@ public class PageSaveConcurrencyFilter implements Filter {
                 pageSaveInProgress.remove(servletPath);
             }
         }
-
+        
         chain.doFilter(request, response);
         return;
     }

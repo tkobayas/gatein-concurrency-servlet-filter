@@ -13,10 +13,15 @@ import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 
+import org.gatein.common.logging.Logger;
+import org.gatein.common.logging.LoggerFactory;
+
 /*
  * This filter is designed to avoid concurrency against UserSite creation. See BZ1059053
  */
 public class DashboardConcurrencyFilter implements Filter {
+    
+    private final Logger log = LoggerFactory.getLogger(DashboardConcurrencyFilter.class);
 
     private static Set<String> userSiteCreationInProgress = Collections.synchronizedSet(new HashSet<String>());
     private static Set<String> userSiteCreated = Collections.synchronizedSet(new HashSet<String>());
@@ -49,17 +54,18 @@ public class DashboardConcurrencyFilter implements Filter {
         if (userSiteCreated.contains(user)) {
             // Once user site is created, concurrent access is safe.
             // After restarting JBoss, this Set gets empty but will be populated by the first try
-            //System.out.println("already created for : " + user);
+            log.info("already created for : " + user);
             chain.doFilter(request, response);
             return;
         }
 
         if (!userSiteCreationInProgress.contains(user)) {
-            // this means the first access for user site
-            //System.out.println("first access by " + user);
+            // this means the first access for user site after boot
+            log.info("first access by " + user);
             userSiteCreationInProgress.add(user);
             try {
                 chain.doFilter(request, response);
+                log.info("finished the first access by " + user);
             } finally {
                 userSiteCreationInProgress.remove(user);
             }
@@ -68,7 +74,7 @@ public class DashboardConcurrencyFilter implements Filter {
         }
 
         // Now avoid concurrent access
-        //System.out.println("Start waiting : " + System.currentTimeMillis());
+        log.info("Start waiting : " + System.currentTimeMillis());
         for (int i = 0; i < maxRetry; i++) {
             try {
                 Thread.sleep(100);
@@ -78,11 +84,11 @@ public class DashboardConcurrencyFilter implements Filter {
                 break;
             }
             if (i == (maxRetry -1)) {
-                System.out.println("WARN: Reached to maxRetry (" + maxRetry + "). This could be a slowness issue in Portal. We recommend to capture several thread dumps." );
+                log.warn("WARN: Reached to maxRetry (" + maxRetry + "). This could be a slowness issue in Portal. We recommend to capture several thread dumps." );
                 userSiteCreationInProgress.remove(user);
             }
         }
-        //System.out.println("Finish waiting : " + System.currentTimeMillis());
+        log.info("Finish waiting : " + System.currentTimeMillis());
 
         chain.doFilter(request, response);
         return;
